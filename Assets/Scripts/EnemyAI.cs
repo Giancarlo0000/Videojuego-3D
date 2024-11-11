@@ -7,7 +7,7 @@ public class EnemyAI : MonoBehaviour
     [SerializeField] private float attackRange = 0.7f;
     [SerializeField] private float attackDelay = 0.35f;
     [SerializeField] private Transform player;
-    [SerializeField] private Transform punchTransform;
+    [SerializeField] private Transform PunchHitbox;
     [SerializeField] private float pushDuration = 0.6f;
     [SerializeField] private float pushForce = 180f;
     [SerializeField] private float playerTrackingDistance = 10f;
@@ -18,23 +18,29 @@ public class EnemyAI : MonoBehaviour
     private bool canAttack = true;
     private bool canMove = true;
     private bool isKnockedOut = false;
+    private AudioSource _audioSource = null;
 
     private void Start()
     {
         player = GameObject.FindGameObjectWithTag("Player").transform;
+        _audioSource = GetComponent<AudioSource>();
+        PunchHitbox.gameObject.SetActive(false);
     }
 
     private void Update()
     {
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
 
-        if (distanceToPlayer <= attackRange && canAttack)
+        if (distanceToPlayer <= playerTrackingDistance && canMove)
         {
-            StartCoroutine(Attack());
-        }
-        else if (distanceToPlayer <= playerTrackingDistance && canMove)
-        {
-            FollowPlayer();
+            if (distanceToPlayer <= attackRange && canAttack)
+            {
+                StartCoroutine(Attack());
+            }
+            else
+            {
+                FollowPlayer();
+            }
         }
         else
         {
@@ -67,31 +73,41 @@ public class EnemyAI : MonoBehaviour
         }
         yield return new WaitForSeconds(attackDelay);
 
-        Collider[] players = Physics.OverlapSphere(punchTransform.position, attackRange);
+        PunchHitbox.gameObject.SetActive(true);
+        yield return new WaitForSeconds(0.1f);
+        PunchHitbox.gameObject.SetActive(false);
 
-        foreach (Collider playerCollider in players)
-        {
-            if (playerCollider.CompareTag("Player") && !isKnockedOut)
-            {
-                Rigidbody playerRb = playerCollider.GetComponent<Rigidbody>();
-                Animator enemyAnimator = playerCollider.GetComponent<Animator>();
-                PlayerMove playerMove = playerCollider.GetComponent<PlayerMove>();
-                if (playerRb != null)
-                {
-                    enemyAnimator.SetTrigger("KnockOut");
-                    Vector3 pushDirection = (playerCollider.transform.position - transform.position).normalized;
-
-                    for (float t = 0; t < pushDuration; t += Time.deltaTime)
-                    {
-                        playerRb.AddForce(pushDirection * (pushForce * Time.deltaTime / pushDuration), ForceMode.Impulse);
-                        yield return null;
-                    }
-                    playerMove.KnockedOut(paralysisTimePerHit);
-                }
-            }
-        }
         yield return new WaitForSeconds(0.6f);
         canAttack = true;
+    }
+
+    public void HandleHit(Collider playerCollider)
+    {
+        if (playerCollider.CompareTag("Player") && !isKnockedOut)
+        {
+            Rigidbody playerRb = playerCollider.GetComponent<Rigidbody>();
+            Animator playerAnimator = playerCollider.GetComponent<Animator>();
+            PlayerMove playerMove = playerCollider.GetComponent<PlayerMove>();
+
+            _audioSource.Play();
+
+            if (playerRb != null)
+            {
+                playerAnimator.SetTrigger("KnockOut");
+                Vector3 pushDirection = (playerCollider.transform.position - transform.position).normalized;
+                StartCoroutine(PushPlayer(playerRb, pushDirection, playerMove));
+            }
+        }
+    }
+
+    private IEnumerator PushPlayer(Rigidbody playerRb, Vector3 pushDirection, PlayerMove playerMove)
+    {
+        for (float t = 0; t < pushDuration; t += Time.deltaTime)
+        {
+            playerRb.AddForce(pushDirection * (pushForce * Time.deltaTime / pushDuration), ForceMode.Impulse);
+            yield return null;
+        }
+        playerMove.KnockedOut(paralysisTimePerHit);
     }
 
     public void KnockedOut(float duration)
@@ -115,9 +131,6 @@ public class EnemyAI : MonoBehaviour
 
     private void OnDrawGizmos()
     {
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(punchTransform.position, attackRange);
-
         Gizmos.color = Color.blue;
         Gizmos.DrawWireSphere(transform.position, playerTrackingDistance);
     }

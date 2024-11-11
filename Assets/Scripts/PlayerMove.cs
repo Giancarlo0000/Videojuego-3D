@@ -6,20 +6,26 @@ public class PlayerMove : MonoBehaviour
 {
     [SerializeField] private float runSpeed = 7;
     [SerializeField] private float jumpForce = 6.5f;
-    [SerializeField] private float attackRange = 0.7f;
     [SerializeField] private float pushForce = 200f;
     [SerializeField] private float pushDuration = 0.6f;
     [SerializeField] private float attackDelay = 0.35f;
     [SerializeField] private float paralysisTimePerHit = 1f;
-    [SerializeField] private Transform punchTransform;
-
+    [SerializeField] private Transform punchHitbox;
     [SerializeField] private Animator animator;
+
+    [SerializeField] private AudioClip HitSound = null;
+    [SerializeField] private AudioClip DefeatSound = null;
+    [SerializeField] private AudioClip JumpSound = null;
+    [SerializeField] private ParticleSystem HitParticles = null;
 
     private float x, y;
     private bool isGrounded;
     private bool canAttack = true;
     private bool canMove = true;
     private bool isKnockedOut = false;
+    private AudioSource _audioSource = null;
+    private AudioManager _audioManager = null;
+    private bool _hasDefeated = false;
 
     [SerializeField] private Transform groundCheck;
     [SerializeField] private LayerMask groundMask;
@@ -31,8 +37,11 @@ public class PlayerMove : MonoBehaviour
 
     private void Start()
     {
+        _audioSource = GetComponent<AudioSource>();
         rb = GetComponent<Rigidbody>();
         Cursor.lockState = CursorLockMode.Locked;
+        punchHitbox.gameObject.SetActive(false);
+        _audioManager = FindObjectOfType<AudioManager>();
     }
 
     void Update()
@@ -60,9 +69,13 @@ public class PlayerMove : MonoBehaviour
             StartCoroutine(Attack());
         }
 
-        if (transform.position.y < -15f)
+        if (transform.position.y < -15f && !_hasDefeated)
         {
-            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+            _hasDefeated = true;
+            _audioManager.StopMusic();
+            _audioSource.clip = DefeatSound;
+            _audioSource.Play();
+            StartCoroutine(ResetScene());
         }
     }
 
@@ -88,6 +101,8 @@ public class PlayerMove : MonoBehaviour
 
     private void Jump()
     {
+        _audioSource.clip = JumpSound;
+        _audioSource.Play();
         rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
         animator.SetTrigger("Jump");
     }
@@ -99,32 +114,54 @@ public class PlayerMove : MonoBehaviour
 
         yield return new WaitForSeconds(attackDelay);
 
-        Collider[] enemies = Physics.OverlapSphere(punchTransform.position, attackRange);
+        punchHitbox.gameObject.SetActive(true);
 
-        foreach (Collider enemy in enemies)
-        {
-            if (enemy.CompareTag("Enemy") && !isKnockedOut)
-            {
-                Rigidbody enemyRb = enemy.GetComponent<Rigidbody>();
-                Animator enemyAnimator = enemy.GetComponent<Animator>();
-                EnemyAI enemyAi = enemy.GetComponent<EnemyAI>();
-                if (enemyRb != null)
-                {
-                    enemyAnimator.SetTrigger("KnockOut");
-                    Vector3 pushDirection = (enemy.transform.position - transform.position).normalized; 
+        yield return new WaitForSeconds(0.25f);
 
-                    for (float t = 0; t < pushDuration; t += Time.deltaTime)
-                    {
-                        enemyRb.AddForce(pushDirection * (pushForce * Time.deltaTime / pushDuration), ForceMode.Impulse);
-                        yield return null;
-                    }
-                    enemyAi.KnockedOut(paralysisTimePerHit);
-                    canAttack = true;
-                }
-            }
-        }
+        punchHitbox.gameObject.SetActive(false);
+
         yield return new WaitForSeconds(1f);
         canAttack = true;
+    }
+
+    public void HandleHit(Collider enemy)
+    {
+        if (enemy.CompareTag("Enemy") && !isKnockedOut)
+        {
+            Rigidbody enemyRb = enemy.GetComponent<Rigidbody>();
+            Animator enemyAnimator = enemy.GetComponent<Animator>();
+            EnemyAI enemyAI = enemy.GetComponent<EnemyAI>();
+
+            _audioSource.clip = HitSound;
+            _audioSource.Play();
+
+            HitParticles.Play();
+            StartCoroutine(StopHitParticles());
+
+            if (enemyRb != null)
+            {
+                enemyAnimator.SetTrigger("KnockOut");
+
+                Vector3 pushDirection = (enemy.transform.position - transform.position).normalized;
+
+                StartCoroutine(PushEnemy(enemyRb, pushDirection, enemyAI));
+            }
+        }
+    }
+    private IEnumerator StopHitParticles()
+    {
+        yield return new WaitForSeconds(HitParticles.main.duration);
+        HitParticles.Stop();
+    }
+
+    private IEnumerator PushEnemy(Rigidbody enemyRb, Vector3 pushDirection, EnemyAI enemyAI)
+    {
+        for (float t = 0; t < pushDuration; t += Time.deltaTime)
+        {
+            enemyRb.AddForce(pushDirection * (pushForce * Time.deltaTime / pushDuration), ForceMode.Impulse);
+            yield return null;
+        }
+        enemyAI.KnockedOut(paralysisTimePerHit);
     }
 
     public void KnockedOut(float duration)
@@ -143,9 +180,9 @@ public class PlayerMove : MonoBehaviour
         isKnockedOut = false;
     }
 
-    private void OnDrawGizmos()
+    private IEnumerator ResetScene()
     {
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(punchTransform.position, attackRange);
+        yield return new WaitForSeconds(_audioSource.clip.length);
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 }
