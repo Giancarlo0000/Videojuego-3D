@@ -11,7 +11,6 @@ public class PlayerMove : MonoBehaviour
     [SerializeField] private float attackDelay = 0.35f;
     [SerializeField] private float paralysisTimePerHit = 1f;
     [SerializeField] private Transform punchHitbox;
-    [SerializeField] private Animator animator;
 
     [SerializeField] private AudioClip HitSound = null;
     [SerializeField] private AudioClip DefeatSound = null;
@@ -35,13 +34,23 @@ public class PlayerMove : MonoBehaviour
     [SerializeField] private float mouseSensitivity = 2f;
     private float verticalRotation = 0f;
 
+    private Collider _mainCollider = null;
+    private Animator _animator = null;
+
+    private Collider[] _ragdollColliders = null;
+    private Rigidbody[] _ragdollRigidbodies = null;
+
     private void Start()
     {
+        _mainCollider = GetComponent<Collider>();
+        _animator = GetComponent<Animator>();
         _audioSource = GetComponent<AudioSource>();
         rb = GetComponent<Rigidbody>();
         Cursor.lockState = CursorLockMode.Locked;
         punchHitbox.gameObject.SetActive(false);
         _audioManager = FindObjectOfType<AudioManager>();
+        RagdollParts();
+        RagdollOff();
     }
 
     void Update()
@@ -57,7 +66,7 @@ public class PlayerMove : MonoBehaviour
         }
 
         isGrounded = Physics.CheckSphere(groundCheck.position, 0.2f, groundMask);
-        animator.SetBool("IsGrounded", isGrounded);
+        _animator.SetBool("IsGrounded", isGrounded);
 
         if (isGrounded && Input.GetKeyDown(KeyCode.Space))
         {
@@ -95,8 +104,8 @@ public class PlayerMove : MonoBehaviour
     {
         Vector3 move = transform.right * x + transform.forward * y;
         rb.MovePosition(rb.position + move * runSpeed * Time.deltaTime);
-        animator.SetFloat("VelX", x);
-        animator.SetFloat("VelY", y);
+        _animator.SetFloat("VelX", x);
+        _animator.SetFloat("VelY", y);
     }
 
     private void Jump()
@@ -104,13 +113,13 @@ public class PlayerMove : MonoBehaviour
         _audioSource.clip = JumpSound;
         _audioSource.Play();
         rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
-        animator.SetTrigger("Jump");
+        _animator.SetTrigger("Jump");
     }
 
     private IEnumerator Attack()
     {
         canAttack = false;
-        animator.SetTrigger("Punch");
+        _animator.SetTrigger("Punch");
 
         yield return new WaitForSeconds(attackDelay);
 
@@ -128,23 +137,28 @@ public class PlayerMove : MonoBehaviour
     {
         if (enemy.CompareTag("Enemy") && !isKnockedOut)
         {
-            Rigidbody enemyRb = enemy.GetComponent<Rigidbody>();
-            Animator enemyAnimator = enemy.GetComponent<Animator>();
             EnemyAI enemyAI = enemy.GetComponent<EnemyAI>();
 
             _audioSource.clip = HitSound;
             _audioSource.Play();
-
             HitParticles.Play();
             StartCoroutine(StopHitParticles());
 
-            if (enemyRb != null)
+            if (enemyAI != null)
             {
-                enemyAnimator.SetTrigger("KnockOut");
-
                 Vector3 pushDirection = (enemy.transform.position - transform.position).normalized;
-
-                StartCoroutine(PushEnemy(enemyRb, pushDirection, enemyAI));
+                if (enemyAI.IsRagdollActive())
+                {
+                    enemyAI.ApplyForceToRagdoll(pushDirection * pushForce);
+                }
+                else
+                {
+                    Rigidbody enemyRb = enemy.GetComponent<Rigidbody>();
+                    if (enemyRb != null)
+                    {
+                        StartCoroutine(PushEnemy(enemyRb, pushDirection, enemyAI));
+                    }
+                }
             }
         }
     }
@@ -156,12 +170,20 @@ public class PlayerMove : MonoBehaviour
 
     private IEnumerator PushEnemy(Rigidbody enemyRb, Vector3 pushDirection, EnemyAI enemyAI)
     {
-        for (float t = 0; t < pushDuration; t += Time.deltaTime)
-        {
-            enemyRb.AddForce(pushDirection * (pushForce * Time.deltaTime / pushDuration), ForceMode.Impulse);
-            yield return null;
-        }
         enemyAI.KnockedOut(paralysisTimePerHit);
+        if (enemyAI.IsRagdollActive())
+        {
+            enemyAI.ApplyForceToRagdoll(pushDirection * pushForce);
+        }
+        else
+        {
+            for (float t = 0; t < pushDuration; t += Time.deltaTime)
+            {
+                enemyRb.AddForce(pushDirection * (pushForce * Time.deltaTime / pushDuration), ForceMode.Impulse);
+                yield return null;
+            }
+        }
+        
     }
 
     public void KnockedOut(float duration)
@@ -171,10 +193,12 @@ public class PlayerMove : MonoBehaviour
 
     private IEnumerator Paralyze(float duration)
     {
+        RagdollOn();
         canAttack = false;
         canMove = false;
         isKnockedOut = true;
         yield return new WaitForSeconds(duration);
+        RagdollOff();
         canMove = true;
         canAttack = true;
         isKnockedOut = false;
@@ -184,5 +208,82 @@ public class PlayerMove : MonoBehaviour
     {
         yield return new WaitForSeconds(_audioSource.clip.length);
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
+    private void RagdollOn()
+    {
+        _animator.enabled = false;
+
+        foreach (Collider ragdollCollider in _ragdollColliders)
+        {
+            ragdollCollider.enabled = true;
+        }
+        foreach (Rigidbody ragdollRigidbody in _ragdollRigidbodies)
+        {
+            ragdollRigidbody.isKinematic = false;
+        }
+
+        _mainCollider.enabled = false;
+        GetComponent<Rigidbody>().isKinematic = true;
+
+        _mainCollider.enabled = false;
+    }
+
+    private void RagdollOff()
+    {
+        Rigidbody ragdollMainBody = GetMainRagdollBody();
+
+        if (ragdollMainBody != null)
+        {
+            transform.position = ragdollMainBody.position;
+            transform.rotation = Quaternion.identity;
+        }
+
+        foreach (Collider ragdollCollider in _ragdollColliders)
+        {
+            ragdollCollider.enabled = false;
+        }
+        foreach (Rigidbody ragdollRigidbody in _ragdollRigidbodies)
+        {
+            ragdollRigidbody.isKinematic = true;
+        }
+
+        _mainCollider.enabled = true;
+        _animator.enabled = true;
+        GetComponent<Rigidbody>().isKinematic = false;
+    }
+
+    private void RagdollParts()
+    {
+        _ragdollColliders = GetComponentsInChildren<Collider>();
+        _ragdollRigidbodies = GetComponentsInChildren<Rigidbody>();
+    }
+
+    public bool IsRagdollActive()
+    {
+        return !canMove;
+    }
+
+    public void ApplyForceToRagdoll(Vector3 force)
+    {
+        foreach (var ragdollRigidbody in _ragdollRigidbodies)
+        {
+            if (ragdollRigidbody != null && ragdollRigidbody.gameObject.activeSelf)
+            {
+                ragdollRigidbody.AddForce(force, ForceMode.Impulse);
+            }
+        }
+    }
+
+    private Rigidbody GetMainRagdollBody()
+    {
+        foreach (Rigidbody rb in _ragdollRigidbodies)
+        {
+            if (rb.name.ToLower().Contains("hips") || rb.name.ToLower().Contains("spine"))
+            {
+                return rb;
+            }
+        }
+        return null;
     }
 }

@@ -6,30 +6,39 @@ public class EnemyAI : MonoBehaviour
     [SerializeField] private float moveSpeed = 5f;
     [SerializeField] private float attackRange = 0.7f;
     [SerializeField] private float attackDelay = 0.35f;
-    [SerializeField] private Transform player;
+    private Transform _player;
     [SerializeField] private Transform PunchHitbox;
     [SerializeField] private float pushDuration = 0.6f;
     [SerializeField] private float pushForce = 180f;
     [SerializeField] private float playerTrackingDistance = 10f;
     [SerializeField] private float paralysisTimePerHit = 1f;
+    [SerializeField] private float TimeBetweenAttacks = 1.5f;
 
-    [SerializeField] private Animator animator;
+    private Animator _animator;
 
     private bool canAttack = true;
     private bool canMove = true;
     private bool isKnockedOut = false;
     private AudioSource _audioSource = null;
 
+    private Collider _mainCollider = null;
+    private Collider[] _ragdollColliders = null;
+    private Rigidbody[] _ragdollRigidbodies = null;
+
     private void Start()
     {
-        player = GameObject.FindGameObjectWithTag("Player").transform;
+        _mainCollider = GetComponent<Collider>();
+        _animator = GetComponent<Animator>();
+        _player = GameObject.FindGameObjectWithTag("PlayerPos").transform;
         _audioSource = GetComponent<AudioSource>();
         PunchHitbox.gameObject.SetActive(false);
+        RagdollParts();
+        RagdollOff();
     }
 
     private void Update()
     {
-        float distanceToPlayer = Vector3.Distance(transform.position, player.position);
+        float distanceToPlayer = Vector3.Distance(transform.position, _player.position);
 
         if (distanceToPlayer <= playerTrackingDistance && canMove)
         {
@@ -44,14 +53,14 @@ public class EnemyAI : MonoBehaviour
         }
         else
         {
-            animator.SetFloat("VelX", 0);
-            animator.SetFloat("VelY", 0);
+            _animator.SetFloat("VelX", 0);
+            _animator.SetFloat("VelY", 0);
         }
     }
 
     private void FollowPlayer()
     {
-        Vector3 direction = (player.position - transform.position).normalized;
+        Vector3 direction = (_player.position - transform.position).normalized;
         transform.position += direction * moveSpeed * Time.deltaTime;
 
         Quaternion lookRotation = Quaternion.LookRotation(direction);
@@ -59,25 +68,28 @@ public class EnemyAI : MonoBehaviour
         lookRotation.z = 0;
         transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 5f);
 
-        animator.SetFloat("VelX", direction.x);
-        animator.SetFloat("VelY", direction.z);
+        _animator.SetFloat("VelX", direction.x);
+        _animator.SetFloat("VelY", direction.z);
     }
 
     private IEnumerator Attack()
     {
         canAttack = false;
         yield return new WaitForSeconds(0.3f);
-        if (!isKnockedOut)
+        if (isKnockedOut)
         {
-            animator.SetTrigger("Punch");
+            canAttack = true;
+            yield break;
         }
+
+        _animator.SetTrigger("Punch");
         yield return new WaitForSeconds(attackDelay);
 
         PunchHitbox.gameObject.SetActive(true);
         yield return new WaitForSeconds(0.1f);
         PunchHitbox.gameObject.SetActive(false);
 
-        yield return new WaitForSeconds(0.6f);
+        yield return new WaitForSeconds(TimeBetweenAttacks);
         canAttack = true;
     }
 
@@ -85,45 +97,61 @@ public class EnemyAI : MonoBehaviour
     {
         if (playerCollider.CompareTag("Player") && !isKnockedOut)
         {
-            Rigidbody playerRb = playerCollider.GetComponent<Rigidbody>();
-            Animator playerAnimator = playerCollider.GetComponent<Animator>();
             PlayerMove playerMove = playerCollider.GetComponent<PlayerMove>();
-
             _audioSource.Play();
 
-            if (playerRb != null)
+            if (playerMove != null)
             {
-                playerAnimator.SetTrigger("KnockOut");
                 Vector3 pushDirection = (playerCollider.transform.position - transform.position).normalized;
-                StartCoroutine(PushPlayer(playerRb, pushDirection, playerMove));
+                if (playerMove.IsRagdollActive())
+                {
+                    playerMove.ApplyForceToRagdoll(pushDirection * pushForce);
+                }
+                else
+                {
+                    Rigidbody playerRb = playerCollider.GetComponent<Rigidbody>();
+                    if (playerRb != null)
+                    {
+                        StartCoroutine(PushPlayer(playerRb, pushDirection, playerMove));
+                    }
+                }
             }
         }
     }
 
     private IEnumerator PushPlayer(Rigidbody playerRb, Vector3 pushDirection, PlayerMove playerMove)
     {
-        for (float t = 0; t < pushDuration; t += Time.deltaTime)
-        {
-            playerRb.AddForce(pushDirection * (pushForce * Time.deltaTime / pushDuration), ForceMode.Impulse);
-            yield return null;
-        }
         playerMove.KnockedOut(paralysisTimePerHit);
+        if (playerMove.IsRagdollActive())
+        {
+            playerMove.ApplyForceToRagdoll(pushDirection * pushForce);
+        }
+        else
+        {
+            for (float t = 0; t < pushDuration; t += Time.deltaTime)
+            {
+                playerRb.AddForce(pushDirection * (pushForce * Time.deltaTime / pushDuration), ForceMode.Impulse);
+                yield return null;
+            }
+        }
     }
 
     public void KnockedOut(float duration)
     {
-        StartCoroutine(Paralyze(duration));
         StopCoroutine(Attack());
+        StartCoroutine(Paralyze(duration));
     }
 
     private IEnumerator Paralyze(float duration)
     {
+        RagdollOn();
         canAttack = false;
         canMove = false;
         isKnockedOut = true;
-        animator.SetFloat("VelX", 0);
-        animator.SetFloat("VelY", 0);
+        _animator.SetFloat("VelX", 0);
+        _animator.SetFloat("VelY", 0);
         yield return new WaitForSeconds(duration);
+        RagdollOff();
         canAttack = true;
         canMove = true;
         isKnockedOut = false;
@@ -133,5 +161,80 @@ public class EnemyAI : MonoBehaviour
     {
         Gizmos.color = Color.blue;
         Gizmos.DrawWireSphere(transform.position, playerTrackingDistance);
+    }
+
+    private void RagdollOn()
+    {
+        _animator.enabled = false;
+
+        foreach (Collider ragdollCollider in _ragdollColliders)
+        {
+            ragdollCollider.enabled = true;
+        }
+        foreach (Rigidbody ragdollRigidbody in _ragdollRigidbodies)
+        {
+            ragdollRigidbody.isKinematic = false;
+        }
+
+        _mainCollider.enabled = false;
+        GetComponent<Rigidbody>().isKinematic = true;
+    }
+
+    private void RagdollOff()
+    {
+        Rigidbody ragdollMainBody = GetMainRagdollBody();
+
+        if (ragdollMainBody != null)
+        {
+            transform.position = ragdollMainBody.position;
+            transform.rotation = Quaternion.identity;
+        }
+
+        foreach (Collider ragdollCollider in _ragdollColliders)
+        {
+            ragdollCollider.enabled = false;
+        }
+        foreach (Rigidbody ragdollRigidbody in _ragdollRigidbodies)
+        {
+            ragdollRigidbody.isKinematic = true;
+        }
+
+        _mainCollider.enabled = true;
+        _animator.enabled = true;
+        GetComponent<Rigidbody>().isKinematic = false;
+    }
+
+    private void RagdollParts()
+    {
+        _ragdollColliders = GetComponentsInChildren<Collider>();
+        _ragdollRigidbodies = GetComponentsInChildren<Rigidbody>();
+    }
+
+    public bool IsRagdollActive()
+    {
+        return !canMove;
+    }
+
+    public void ApplyForceToRagdoll(Vector3 force)
+    {
+        foreach (var ragdollRigidbody in _ragdollRigidbodies)
+        {
+            if (ragdollRigidbody != null && ragdollRigidbody.gameObject.activeSelf)
+            {
+                ragdollRigidbody.AddForce(force, ForceMode.Impulse);
+            }
+        }
+    }
+
+    private Rigidbody GetMainRagdollBody()
+    {
+        foreach (Rigidbody rigidbody in _ragdollRigidbodies)
+        {
+            if (rigidbody.name.ToLower().Contains("hips") || rigidbody.name.ToLower().Contains("spine"))
+            {
+                return rigidbody;
+            }
+        }
+        return null;
     }
 }

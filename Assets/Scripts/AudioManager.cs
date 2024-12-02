@@ -8,6 +8,11 @@ public class AudioManager : MonoBehaviour
 
     private void Start()
     {
+        foreach (var clip in Songs)
+        {
+            clip.LoadAudioData();
+        }
+
         PlayRandomSong();
     }
 
