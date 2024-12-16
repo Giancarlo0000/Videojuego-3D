@@ -281,6 +281,7 @@ MonoBehaviour:
   playerTrackingDistance: 4
   paralysisTimePerHit: 1
   TimeBetweenAttacks: 1.5
+  HipsPosition: {fileID: 5946652552288467891}
 --- !u!54 &2474077838924283647
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -990,6 +991,11 @@ CharacterJoint:
   m_EnablePreprocessing: 0
   m_MassScale: 1
   m_ConnectedMassScale: 1
+--- !u!4 &5946652552288467891 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5465940246521907071, guid: b68d70b95d3d6c14e97071174c57e442, type: 3}
+  m_PrefabInstance: {fileID: 1827383156649622732}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &6307590076574925329 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: -3542885339558904099, guid: b68d70b95d3d6c14e97071174c57e442, type: 3}

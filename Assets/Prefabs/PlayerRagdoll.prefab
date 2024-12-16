@@ -5142,6 +5142,10 @@ PrefabInstance:
       propertyPath: m_TagString
       value: Player
       objectReference: {fileID: 0}
+    - target: {fileID: 1082271958561512970, guid: b68d70b95d3d6c14e97071174c57e442, type: 3}
+      propertyPath: m_TagString
+      value: PlayerRagdoll
+      objectReference: {fileID: 0}
     - target: {fileID: 5866666021909216657, guid: b68d70b95d3d6c14e97071174c57e442, type: 3}
       propertyPath: m_Controller
       value: 
@@ -5577,6 +5581,11 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -3480699329000672020, guid: b68d70b95d3d6c14e97071174c57e442, type: 3}
   m_PrefabInstance: {fileID: 6093932175879551534}
   m_PrefabAsset: {fileID: 0}
+--- !u!4 &2254918815209798993 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5465940246521907071, guid: b68d70b95d3d6c14e97071174c57e442, type: 3}
+  m_PrefabInstance: {fileID: 6093932175879551534}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &3372781979608502189 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 8817898888258712963, guid: b68d70b95d3d6c14e97071174c57e442, type: 3}
@@ -6006,8 +6015,9 @@ MonoBehaviour:
   pushForce: 10
   pushDuration: 0.6
   attackDelay: 0.35
-  paralysisTimePerHit: 2
+  paralysisTimePerHit: 2.5
   punchHitbox: {fileID: 2199909974812348550}
+  HipsPosition: {fileID: 2254918815209798993}
   HitSound: {fileID: 8300000, guid: e5fc1a8437ac5744584cdfd820ba399b, type: 3}
   DefeatSound: {fileID: 8300000, guid: 42f24c679ef65964fb22a89fcf0fa6e3, type: 3}
   JumpSound: {fileID: 8300000, guid: 3fdc55fc24e3f004c88d30b33344bf4a, type: 3}

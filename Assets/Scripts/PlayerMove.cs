@@ -11,6 +11,7 @@ public class PlayerMove : MonoBehaviour
     [SerializeField] private float attackDelay = 0.35f;
     [SerializeField] private float paralysisTimePerHit = 1f;
     [SerializeField] private Transform punchHitbox;
+    [SerializeField] private Transform HipsPosition = null;
 
     [SerializeField] private AudioClip HitSound = null;
     [SerializeField] private AudioClip DefeatSound = null;
@@ -24,7 +25,7 @@ public class PlayerMove : MonoBehaviour
     private bool isKnockedOut = false;
     private AudioSource _audioSource = null;
     private AudioManager _audioManager = null;
-    private bool _hasDefeated = false;
+    //private bool _hasDefeated = false;
 
     [SerializeField] private Transform groundCheck;
     [SerializeField] private LayerMask groundMask;
@@ -76,15 +77,6 @@ public class PlayerMove : MonoBehaviour
         if (Input.GetMouseButtonDown(0) && canAttack)
         {
             StartCoroutine(Attack());
-        }
-
-        if (transform.position.y < -15f && !_hasDefeated)
-        {
-            _hasDefeated = true;
-            _audioManager.StopMusic();
-            _audioSource.clip = DefeatSound;
-            _audioSource.Play();
-            StartCoroutine(ResetScene());
         }
     }
 
@@ -193,21 +185,15 @@ public class PlayerMove : MonoBehaviour
 
     private IEnumerator Paralyze(float duration)
     {
-        RagdollOn();
         canAttack = false;
         canMove = false;
         isKnockedOut = true;
+        RagdollOn();
         yield return new WaitForSeconds(duration);
         RagdollOff();
         canMove = true;
         canAttack = true;
         isKnockedOut = false;
-    }
-
-    private IEnumerator ResetScene()
-    {
-        yield return new WaitForSeconds(_audioSource.clip.length);
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 
     private void RagdollOn()
@@ -231,7 +217,8 @@ public class PlayerMove : MonoBehaviour
 
     private void RagdollOff()
     {
-        Rigidbody ragdollMainBody = GetMainRagdollBody();
+        //Rigidbody ragdollMainBody = GetMainRagdollBody();
+        Transform ragdollMainBody = HipsPosition;
 
         if (ragdollMainBody != null)
         {
@@ -285,5 +272,14 @@ public class PlayerMove : MonoBehaviour
             }
         }
         return null;
+    }
+
+    public void PlayerDefeated()
+    {
+        playerCamera.transform.parent = null;
+        //_hasDefeated = true;
+        _audioManager.StopMusic();
+        _audioSource.clip = DefeatSound;
+        _audioSource.Play();
     }
 }

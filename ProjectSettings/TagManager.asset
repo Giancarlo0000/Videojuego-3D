@@ -7,6 +7,7 @@ TagManager:
   - Enemy
   - PlayerPos
   - Platform
+  - PlayerRagdoll
   layers:
   - Default
   - TransparentFX

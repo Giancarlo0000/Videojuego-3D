@@ -40,6 +40,7 @@ public class WinCondition : MonoBehaviour
     private IEnumerator SfxResetSound()
     {
         yield return new WaitForSeconds(_audioSource.clip.length);
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        Cursor.lockState = CursorLockMode.None;
+        SceneManager.LoadScene("LevelsMenu");
     }
 }

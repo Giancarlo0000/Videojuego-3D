@@ -13,6 +13,7 @@ public class EnemyAI : MonoBehaviour
     [SerializeField] private float playerTrackingDistance = 10f;
     [SerializeField] private float paralysisTimePerHit = 1f;
     [SerializeField] private float TimeBetweenAttacks = 1.5f;
+    [SerializeField] private Transform HipsPosition = null;
 
     private Animator _animator;
 
@@ -31,9 +32,11 @@ public class EnemyAI : MonoBehaviour
         _animator = GetComponent<Animator>();
         _player = GameObject.FindGameObjectWithTag("PlayerPos").transform;
         _audioSource = GetComponent<AudioSource>();
+        PunchHitbox.gameObject.SetActive(true);
         PunchHitbox.gameObject.SetActive(false);
         RagdollParts();
         RagdollOff();
+        StartCoroutine(Attack());
     }
 
     private void Update()
@@ -74,6 +77,7 @@ public class EnemyAI : MonoBehaviour
 
     private IEnumerator Attack()
     {
+        Debug.Log("Inicio de ataque");
         canAttack = false;
         yield return new WaitForSeconds(0.3f);
         if (isKnockedOut)
@@ -81,12 +85,14 @@ public class EnemyAI : MonoBehaviour
             canAttack = true;
             yield break;
         }
-
+        Debug.Log("Inicio de animación");
         _animator.SetTrigger("Punch");
         yield return new WaitForSeconds(attackDelay);
 
+        Debug.Log("Hitbox activada");
         PunchHitbox.gameObject.SetActive(true);
         yield return new WaitForSeconds(0.1f);
+        Debug.Log("Hitbox desactivada");
         PunchHitbox.gameObject.SetActive(false);
 
         yield return new WaitForSeconds(TimeBetweenAttacks);
@@ -144,10 +150,10 @@ public class EnemyAI : MonoBehaviour
 
     private IEnumerator Paralyze(float duration)
     {
-        RagdollOn();
         canAttack = false;
         canMove = false;
         isKnockedOut = true;
+        RagdollOn();
         _animator.SetFloat("VelX", 0);
         _animator.SetFloat("VelY", 0);
         yield return new WaitForSeconds(duration);
@@ -182,7 +188,8 @@ public class EnemyAI : MonoBehaviour
 
     private void RagdollOff()
     {
-        Rigidbody ragdollMainBody = GetMainRagdollBody();
+        //Rigidbody ragdollMainBody = GetMainRagdollBody();
+        Transform ragdollMainBody = HipsPosition;
 
         if (ragdollMainBody != null)
         {
